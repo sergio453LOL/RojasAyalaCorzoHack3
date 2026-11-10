@@ -1,1 +1,46 @@
 @import "tailwindcss";
+
+/* Celdas que dan miedo: tiemblan según su nivel de tremor. */
+@keyframes tremble {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(var(--amp), calc(var(--amp) * -1));
+  }
+  50% {
+    transform: translate(calc(var(--amp) * -1), var(--amp));
+  }
+  75% {
+    transform: translate(var(--amp), var(--amp));
+  }
+}
+
+.tremble {
+  display: inline-block;
+  animation: tremble var(--dur) linear infinite;
+}
+.tremble-1 {
+  --amp: 0.6px;
+  --dur: 420ms;
+}
+.tremble-2 {
+  --amp: 1.1px;
+  --dur: 300ms;
+}
+.tremble-3 {
+  --amp: 1.7px;
+  --dur: 200ms;
+}
+
+/* Con reduced motion se distinguen sin movimiento. */
+@media (prefers-reduced-motion: reduce) {
+  .tremble {
+    animation: none;
+  }
+  .scary-mark {
+    text-decoration: underline wavy;
+    text-underline-offset: 3px;
+  }
+}

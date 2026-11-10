@@ -35,7 +35,10 @@ const router = createBrowserRouter([
               { path: '/estado', lazy: page(() => import('./pages/EstadoPage')) },
               {
                 element: <RequirePermission permission="files:read" />,
-                children: [{ path: '/files', element: <ComingSoonPage title="Archivos de datos" /> }],
+                children: [
+                  { path: '/files', lazy: page(() => import('./pages/FilesPage')) },
+                  { path: '/files/:id/refine', lazy: page(() => import('./pages/RefinePage')) },
+                ],
               },
               {
                 element: <RequirePermission permission="refiners:read" />,
