@@ -71,6 +71,41 @@ export interface ClearanceCheckResult {
   checks: Check[]
 }
 
+export interface RosterMember {
+  name: string
+  code: string
+}
+
+export interface RoundInfo {
+  number: number
+  startsAt: string
+  drawAt: string
+}
+
+export interface Clearance {
+  granted: boolean
+  grantedAt: string | null
+  checks: Check[]
+  checkedAt: string | null
+  workspace: { kind: 'DEV' | 'EVAL'; chaosLevel: 0 | 1 | 2 }
+  roster: { members: RosterMember[]; complete: boolean; locked: boolean }
+  round: {
+    approved: boolean
+    approvedAt: string | null
+    approvedRound: number | null
+    nextRoundAt: string | null
+    nextRound: RoundInfo | null
+    drawnMember: { round: number; name: string; code: string; startsAt: string } | null
+    attempts: {
+      round: number
+      startsAt: string
+      member: RosterMember
+      result: 'PASSED' | 'FAILED' | 'ABSENT' | null
+      gradedAt: string | null
+    }[]
+  }
+}
+
 export interface ApiErrorBody {
   error: string
   message: string

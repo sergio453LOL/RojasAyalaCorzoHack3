@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { request } from '../api/client'
-import { errorMessage } from '../api/errors'
-import type { Check, ClearanceCheckResult, IntegrationStatus } from '../api/types'
+import { errorMessage, isApiError } from '../api/errors'
+import type { Check, Clearance, ClearanceCheckResult, IntegrationStatus } from '../api/types'
 import { useAuth } from '../auth/authContext'
 import { config } from '../lib/config'
 
 type Load<T> = { kind: 'loading' } | { kind: 'ok'; data: T } | { kind: 'error'; message: string }
+
+const fmt = (iso: string) => new Date(iso).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
 
 function CheckList({ checks }: { checks: Check[] }) {
   if (checks.length === 0) return <p className="text-slate-400">Sin comprobaciones todavía.</p>
@@ -35,12 +37,24 @@ export default function EstadoPage() {
     message: null,
   })
 
+  const [clearance, setClearance] = useState<Load<Clearance>>({ kind: 'loading' })
+
   const loadStatus = useCallback(async (signal?: AbortSignal) => {
     setStatus({ kind: 'loading' })
     try {
       setStatus({ kind: 'ok', data: await request<IntegrationStatus>('/integrations/status', { signal }) })
     } catch (e) {
       if (!signal?.aborted) setStatus({ kind: 'error', message: errorMessage(e) })
+    }
+  }, [])
+
+  const loadClearance = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const data = await request<Clearance>('/clearance', { signal })
+      setClearance({ kind: 'ok', data })
+      setChaos((c) => ({ ...c, level: data.workspace.chaosLevel }))
+    } catch (e) {
+      if (!signal?.aborted) setClearance({ kind: 'error', message: errorMessage(e) })
     }
   }, [])
 
@@ -52,8 +66,9 @@ export default function EstadoPage() {
         if (!controller.signal.aborted) setHealth({ kind: 'error', message: errorMessage(e) })
       })
     void loadStatus(controller.signal)
+    void loadClearance(controller.signal)
     return () => controller.abort()
-  }, [loadStatus])
+  }, [loadStatus, loadClearance])
 
   async function runCheck() {
     setCheck({ kind: 'loading' })
@@ -61,8 +76,13 @@ export default function EstadoPage() {
       const result = await request<ClearanceCheckResult>('/clearance/check', { method: 'POST' })
       setCheck({ kind: 'ok', data: result })
       if (result.granted) void reloadMe()
+      void loadClearance()
     } catch (e) {
-      setCheck({ kind: 'error', message: errorMessage(e) })
+      const msg =
+        isApiError(e) && e.code === 'CHECK_FROM_APP_REQUIRED'
+          ? 'La revisión solo cuenta desde la app desplegada en el dominio verificado (no desde localhost).'
+          : errorMessage(e)
+      setCheck({ kind: 'error', message: msg })
     }
   }
 
@@ -77,6 +97,7 @@ export default function EstadoPage() {
   }
 
   const st = status.kind === 'ok' ? status.data : null
+  const cl = clearance.kind === 'ok' ? clearance.data : null
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-8 p-6">
@@ -152,7 +173,69 @@ export default function EstadoPage() {
               <CheckList checks={check.data.checks} />
             </div>
           )}
+          {!check && cl && (
+            <div className="flex flex-col gap-2">
+              <p className={cl.granted ? 'text-emerald-300' : 'text-slate-300'}>
+                {cl.granted
+                  ? `Piso de Pruebas abierto${cl.grantedAt ? ` desde ${fmt(cl.grantedAt)}` : ''}.`
+                  : cl.checkedAt
+                    ? `Última revisión: ${fmt(cl.checkedAt)}.`
+                    : 'Todavía no se corrió la revisión.'}
+              </p>
+              <CheckList checks={cl.checks} />
+            </div>
+          )}
         </div>
+      </section>
+
+      <section aria-labelledby="sec-bienestar" className="flex flex-col gap-2">
+        <h2 id="sec-bienestar" className="text-lg font-semibold">
+          Sala de Bienestar
+        </h2>
+        {clearance.kind === 'loading' && <p role="status">Cargando…</p>}
+        {clearance.kind === 'error' && (
+          <p role="alert" className="text-rose-300">
+            {clearance.message}{' '}
+            <button type="button" className="underline" onClick={() => void loadClearance()}>
+              Reintentar
+            </button>
+          </p>
+        )}
+        {cl && (
+          <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1">
+            <dt className="text-slate-400">Ronda de control</dt>
+            <dd className={cl.round.approved ? 'text-emerald-300' : undefined}>
+              {cl.round.approved ? `Aprobada (ronda ${cl.round.approvedRound ?? '?'})` : 'Sin ronda aprobada'}
+            </dd>
+            <dt className="text-slate-400">Próxima ronda</dt>
+            <dd>{cl.round.nextRound ? `N.º ${cl.round.nextRound.number}, ${fmt(cl.round.nextRound.startsAt)}` : '—'}</dd>
+            <dt className="text-slate-400">Sorteado</dt>
+            <dd>
+              {cl.round.drawnMember
+                ? `${cl.round.drawnMember.name} (${cl.round.drawnMember.code}), ronda ${cl.round.drawnMember.round}`
+                : '—'}
+            </dd>
+            <dt className="text-slate-400">Integrantes</dt>
+            <dd>
+              {cl.roster.members.length > 0 ? cl.roster.members.map((m) => `${m.name} (${m.code})`).join(', ') : 'Sin inscribir'}
+              {cl.roster.complete ? '' : ' · roster incompleto'}
+            </dd>
+            {cl.round.attempts.length > 0 && (
+              <>
+                <dt className="text-slate-400">Intentos</dt>
+                <dd>
+                  {cl.round.attempts
+                    .map((a) => `Ronda ${a.round}: ${a.member.name} · ${a.result ?? 'pendiente'}`)
+                    .join(' · ')}
+                </dd>
+              </>
+            )}
+            <dt className="text-slate-400">Workspace</dt>
+            <dd>
+              {cl.workspace.kind} · caos {cl.workspace.chaosLevel}
+            </dd>
+          </dl>
+        )}
       </section>
 
       <section aria-labelledby="sec-caos" className="flex flex-col gap-2">
