@@ -2,7 +2,7 @@
   "teamCode": "TEAM-036",
   "teamName": "PEKKA",
   "deployUrl": "https://rojas-ayala-corzo-hack3.vercel.app",
-  "storageProvider": "SUPABASE | CLOUDINARY",
+  "storageProvider": "SUPABASE",
   "integrantes": [
     { "nombre": "Sergio Rojas", "codigo": "202410758" },
     { "nombre": "Ernesto Corzo", "codigo": "202310441" },
